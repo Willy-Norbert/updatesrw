@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const BASE = process.env.API_URL || 'http://localhost:5000';
+const BASE = process.env.API_URL || 'https://updatesrwtech.vercel.app';
 const results = [];
 
 function assert(condition, message) {

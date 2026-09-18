@@ -1,18 +1,24 @@
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
 const env = require('../config/env');
 const ApiError = require('../utils/ApiError');
 
-const TMP_DIR = path.join(__dirname, '../../uploads/tmp');
-const IMAGE_DIR = path.join(__dirname, '../../uploads/images');
-const VIDEO_DIR = path.join(__dirname, '../../uploads/videos');
-const PROFILE_DIR = path.join(__dirname, '../../uploads/profiles');
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const ROOT_UPLOADS = isServerless
+  ? path.join(os.tmpdir(), 'updaterw-uploads')
+  : path.join(__dirname, '../../uploads');
 
-[TMP_DIR, IMAGE_DIR, VIDEO_DIR, PROFILE_DIR].forEach((dir) => {
+const TMP_DIR = path.join(ROOT_UPLOADS, 'tmp');
+const IMAGE_DIR = path.join(ROOT_UPLOADS, 'images');
+const VIDEO_DIR = path.join(ROOT_UPLOADS, 'videos');
+const PROFILE_DIR = path.join(ROOT_UPLOADS, 'profiles');
+
+function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
-});
+}
 
 const IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const VIDEO_MIMES = new Set(['video/mp4', 'video/webm', 'video/quicktime']);
@@ -21,7 +27,14 @@ const VIDEO_EXTS = new Set(['.mp4', '.webm', '.mov']);
 
 function makeStorage() {
   return multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, TMP_DIR),
+    destination: (_req, _file, cb) => {
+      try {
+        ensureDir(TMP_DIR);
+        cb(null, TMP_DIR);
+      } catch (error) {
+        cb(error);
+      }
+    },
     filename: (_req, file, cb) => {
       const ext = path.extname(file.originalname || '').toLowerCase();
       cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`);
@@ -86,4 +99,5 @@ module.exports = {
   TMP_DIR,
   IMAGE_MIMES,
   VIDEO_MIMES,
+  ensureDir,
 };

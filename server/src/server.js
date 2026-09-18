@@ -1,13 +1,19 @@
 require('dotenv').config();
 const env = require('./config/env');
-const prisma = require('./config/db');
 const app = require('./app');
 
 async function start() {
-  await prisma.$connect();
+  if (env.isConfigured) {
+    const prisma = require('./config/db');
+    await prisma.$connect();
+  }
   const server = app.listen(env.port, () => {
     console.log(`Updaterw API listening on http://localhost:${env.port}`);
-    console.log(`Cloudinary: ${env.cloudinaryEnabled ? 'enabled' : 'local disk fallback'}`);
+    if (!env.isConfigured) {
+      console.error(`Missing env: ${env.missing.join(', ')}`);
+    } else {
+      console.log(`Cloudinary: ${env.cloudinaryEnabled ? 'enabled' : 'local disk fallback'}`);
+    }
   });
   server.on('error', (error) => {
     if (error.code === 'EADDRINUSE') {
@@ -19,7 +25,6 @@ async function start() {
   });
 }
 
-// Vercel provides the serverless listener — do not call app.listen there.
 if (!process.env.VERCEL) {
   start().catch((error) => {
     console.error('Failed to start server', error);

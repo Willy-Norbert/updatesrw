@@ -126,8 +126,8 @@ npm run dev
 ```
 
 - Frontend: http://localhost:5173
-- API: http://localhost:5000
-- Health: http://localhost:5000/health
+- API: https://updatesrwtech.vercel.app
+- Health: https://updatesrwtech.vercel.app/health
 
 ## 6. Default development accounts
 

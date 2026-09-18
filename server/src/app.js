@@ -5,7 +5,6 @@ const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const env = require('./config/env');
-const apiRoutes = require('./routes');
 const notFound = require('./middleware/notFound');
 const errorHandler = require('./middleware/errorHandler');
 
@@ -38,7 +37,13 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.get('/health', (_req, res) => {
-  res.json({ success: true, message: 'Updaterw API is running' });
+  res.json({
+    success: true,
+    message: 'Updaterw API is running',
+    configured: env.isConfigured,
+    missing: env.missing,
+    databaseLooksLocal: env.databaseLooksLocal,
+  });
 });
 
 app.get('/', (_req, res) => {
@@ -47,10 +52,27 @@ app.get('/', (_req, res) => {
     message: 'Updaterw API',
     health: '/health',
     api: '/api',
+    configured: env.isConfigured,
+    missing: env.missing,
   });
 });
 
-app.use('/api', apiRoutes);
+app.use((req, res, next) => {
+  if (env.isConfigured) return next();
+  if (req.path === '/' || req.path === '/health') return next();
+  return res.status(503).json({
+    success: false,
+    message: 'Server is missing required environment variables on Vercel.',
+    missing: env.missing,
+    hint: 'Add DATABASE_URL (hosted Postgres, not localhost), JWT_SECRET, and JWT_REFRESH_SECRET in the Vercel project settings, then redeploy.',
+  });
+});
+
+if (env.isConfigured) {
+  const apiRoutes = require('./routes');
+  app.use('/api', apiRoutes);
+}
+
 app.use(notFound);
 app.use(errorHandler);
 
