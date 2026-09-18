@@ -1,0 +1,337 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  CHIEF_EDITOR
+  ADMIN
+}
+
+enum PostType {
+  TEXT
+  IMAGE
+  VIDEO
+  EXPERIENCE
+  ACHIEVEMENT
+  ARTICLE
+}
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+  HIDDEN
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+enum NotificationType {
+  MENTION
+  COMMENT
+  REPLY
+  LIKE
+  FEATURED
+  MODERATION
+}
+
+enum ReportTargetType {
+  POST
+  COMMENT
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  RESOLVED
+  REJECTED
+}
+
+enum OtpPurpose {
+  VERIFY_EMAIL
+  RESET_PASSWORD
+}
+
+enum EmailAudience {
+  ALL_USERS
+  SELECTED_USERS
+  EXTERNAL
+  MIXED
+}
+
+model User {
+  id                  String    @id @default(uuid())
+  username            String    @unique
+  fullName            String
+  email               String    @unique
+  password            String?
+  profileImage        String?
+  bio                 String?   @db.Text
+  role                Role      @default(USER)
+  isActive            Boolean   @default(true)
+  emailVerified       Boolean   @default(false)
+  onboardingCompleted Boolean   @default(false)
+  emailNotifications  Boolean   @default(true)
+  googleId            String?   @unique
+  githubId            String?   @unique
+  lastLoginAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  posts                    Post[]
+  comments                 Comment[]
+  likes                    Like[]
+  bookmarks                Bookmark[]
+  mentionsMade             Mention[]      @relation("MentionAuthor")
+  mentionsReceived         Mention[]      @relation("MentionedUser")
+  notifications            Notification[] @relation("NotificationRecipient")
+  notificationsTriggered   Notification[] @relation("NotificationActor")
+  reports                  Report[]       @relation("Reporter")
+  reviewedReports          Report[]       @relation("ReportReviewer")
+  refreshTokens            RefreshToken[]
+  emailsSent               EmailLog[]     @relation("EmailSender")
+
+  @@index([role])
+  @@index([isActive])
+  @@index([emailVerified])
+  @@index([createdAt])
+  @@index([lastLoginAt])
+}
+
+model Category {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  posts       Post[]
+
+  @@index([slug])
+}
+
+model Post {
+  id              String     @id @default(uuid())
+  authorId        String
+  author          User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  title           String
+  content         String     @db.Text
+  plainText       String?    @db.Text
+  excerpt         String?    @db.Text
+  postType        PostType   @default(TEXT)
+  status          PostStatus @default(PUBLISHED)
+  featured        Boolean    @default(false)
+  categoryId      String?
+  category        Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  lessonsLearned  String?    @db.Text
+  achievementDate DateTime?
+  organization    String?
+  viewCount       Int        @default(0)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  media         PostMedia[]
+  comments      Comment[]
+  likes         Like[]
+  hashtags      PostHashtag[]
+  mentions      Mention[]
+  bookmarks     Bookmark[]
+  notifications Notification[]
+  reports       Report[]
+
+  @@index([authorId])
+  @@index([categoryId])
+  @@index([status, createdAt])
+  @@index([featured, status])
+  @@index([postType, status])
+  @@index([createdAt])
+}
+
+model PostMedia {
+  id        String    @id @default(uuid())
+  postId    String
+  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  type      MediaType
+  url       String
+  publicId  String?
+  mimeType  String?
+  size      Int?
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  @@index([postId])
+  @@index([type])
+}
+
+model Comment {
+  id              String    @id @default(uuid())
+  postId          String
+  post            Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId        String
+  author          User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parentCommentId String?
+  parent          Comment?  @relation("CommentReplies", fields: [parentCommentId], references: [id], onDelete: Cascade)
+  replies         Comment[] @relation("CommentReplies")
+  content         String    @db.Text
+  isHidden        Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  mentions      Mention[]
+  notifications Notification[]
+  reports       Report[]
+
+  @@index([postId, createdAt])
+  @@index([authorId])
+  @@index([parentCommentId])
+}
+
+model Like {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId])
+  @@index([postId])
+}
+
+model Hashtag {
+  id        String        @id @default(uuid())
+  name      String        @unique
+  createdAt DateTime      @default(now())
+  posts     PostHashtag[]
+
+  @@index([name])
+}
+
+model PostHashtag {
+  postId    String
+  post      Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  hashtagId String
+  hashtag   Hashtag @relation(fields: [hashtagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, hashtagId])
+  @@index([hashtagId])
+}
+
+model Mention {
+  id              String   @id @default(uuid())
+  postId          String?
+  post            Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  commentId       String?
+  comment         Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  authorId        String
+  author          User     @relation("MentionAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  mentionedUserId String
+  mentionedUser   User     @relation("MentionedUser", fields: [mentionedUserId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+
+  @@index([mentionedUserId])
+  @@index([postId])
+  @@index([commentId])
+}
+
+model Bookmark {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId])
+  @@index([userId, createdAt])
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  recipientId String
+  recipient   User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actorId     String?
+  actor       User?            @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  type        NotificationType
+  message     String
+  postId      String?
+  post        Post?            @relation(fields: [postId], references: [id], onDelete: Cascade)
+  commentId   String?
+  comment     Comment?         @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  isRead      Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+
+  @@index([recipientId, isRead, createdAt])
+}
+
+model Report {
+  id         String           @id @default(uuid())
+  reporterId String
+  reporter   User             @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  targetType ReportTargetType
+  postId     String?
+  post       Post?            @relation(fields: [postId], references: [id], onDelete: Cascade)
+  commentId  String?
+  comment    Comment?         @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  reason     String           @db.Text
+  status     ReportStatus     @default(PENDING)
+  reviewedBy String?
+  reviewer   User?            @relation("ReportReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@index([status, createdAt])
+  @@index([targetType])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model OtpCode {
+  id         String     @id @default(uuid())
+  email      String
+  codeHash   String
+  purpose    OtpPurpose
+  attempts   Int        @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime   @default(now())
+
+  @@index([email, purpose, createdAt])
+  @@index([expiresAt])
+}
+
+model EmailLog {
+  id             String        @id @default(uuid())
+  senderId       String?
+  sender         User?         @relation("EmailSender", fields: [senderId], references: [id], onDelete: SetNull)
+  subject        String
+  htmlBody       String        @db.Text
+  textBody       String?       @db.Text
+  audience       EmailAudience @default(MIXED)
+  recipientCount Int           @default(0)
+  recipients     Json?
+  previewOnly    Boolean       @default(false)
+  status         String        @default("SENT")
+  createdAt      DateTime      @default(now())
+
+  @@index([createdAt])
+  @@index([senderId])
+}
